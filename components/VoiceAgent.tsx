@@ -257,7 +257,7 @@ export default function VoiceAgent() {
               <p>AI Voice Customer Support Agent</p>
             </div>
           </div>
-          <div className="badge">DAT ASTRW · AI VOICE CX ASSESSMENT</div>
+          <div className="badge">AI CHATBOT </div>
         </header>
 
         <div className="grid">
@@ -283,7 +283,7 @@ export default function VoiceAgent() {
 
               {!callActive && (
                 <div className="notice">
-                  Click Start Call and allow microphone access. If your browser does not support SpeechRecognition, use the text box below as a fallback.
+                  Click Start Call and allow microphone access. 
                 </div>
               )}
             </section>
@@ -310,7 +310,7 @@ export default function VoiceAgent() {
                 />
                 <button className="secondary" type="submit" disabled={!input.trim() || state === "thinking"}>Send</button>
               </div>
-              <div className="helper">Voice is the primary interaction. Text input is included as a reliable testing fallback.</div>
+              <div className="helper"> Text inputS can also be used for query .</div>
             </form>
 
             {error && <div className="notice">{error}</div>}
