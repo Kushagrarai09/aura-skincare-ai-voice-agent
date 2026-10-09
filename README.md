@@ -1,205 +1,522 @@
 # Aura Skincare — AI Voice CX Agent
 
-A browser-based AI customer-support voice agent built for the Datastraw assessment.
+An AI-powered, browser-based voice customer support agent built for the **Datastraw AI Voice CX Agent assessment**. The agent, named **Aria**, helps customers with order tracking, product information, delivery questions, cancellation eligibility, return policies, and other Aura Skincare-related queries.
 
-## What it demonstrates
+**Live Demo:** https://aura-skincare-ai-voice-agent.vercel.app/ 
+---
 
-- Browser microphone voice input using the Web Speech API.
-- AI reasoning with Gemini.
-- `get_order_details(order_id)` function/tool calling against a mock order database.
-- Aura Skincare policy guardrails.
-- Graceful handling of missing/invalid order IDs and out-of-scope questions.
-- Browser speech output with an Indian-English voice when one is available.
-- Live state indicator: Listening / Thinking / Speaking.
-- Post-call transcript.
-- Structured JSON call summary.
-- Text fallback for browsers where SpeechRecognition is unavailable.
+## Table of Contents
 
-The assessment allows the technology stack to be chosen freely and explicitly says the browser experience does not require telephony.
+- [Overview](#overview)
+- [Features](#features)
+- [Technology Stack](#technology-stack)
+- [System Architecture](#system-architecture)
+- [Project Structure](#project-structure)
+- [Getting Started](#getting-started)
+- [Environment Configuration](#environment-configuration)
+- [How to Use the Application](#how-to-use-the-application)
+- [Sample Orders](#sample-orders)
+- [Business Rules and Policies](#business-rules-and-policies)
+- [API Endpoints](#api-endpoints)
+- [Example Test Scenarios](#example-test-scenarios)
+- [Deployment](#deployment)
+- [Design Decisions](#design-decisions)
+- [Challenges and Solutions](#challenges-and-solutions)
+- [Future Improvements](#future-improvements)
+- [Scaling to 1,000 Conversations per Day](#scaling-to-1000-conversations-per-day)
+- [Limitations](#limitations)
+- [Author](#author)
 
-## Architecture
+## Overview
+
+Aura Skincare AI Voice CX Agent is a full-stack web application that provides an interactive customer support experience through browser-based speech input and output.
+
+Customers can speak naturally to Aria instead of navigating menus or filling out forms. The application processes customer messages through a backend API, uses Gemini for conversational reasoning, and retrieves order information through a dedicated `get_order_details(order_id)` tool backed by a mock order database.
+
+After a call ends, the application displays the conversation transcript and a structured JSON summary containing the customer intent, relevant order ID, resolution status, call summary, tool used, and applicable policy.
+
+The project is designed as a lightweight MVP that can be tested through a public browser URL without requiring a separate telephony system.
+
+## Features
+
+- **Voice interaction:** Captures customer speech using the browser Web Speech API.
+- **AI-powered conversations:** Uses Google's Gemini model to understand requests and generate customer-facing responses.
+- **Order lookup:** Retrieves order details using `get_order_details(order_id)`.
+- **Policy-aware responses:** Applies defined delivery, cancellation, return, and damaged-product policies.
+- **Order validation:** Handles missing or invalid order IDs without inventing order details.
+- **Out-of-scope handling:** Politely redirects requests unrelated to Aura Skincare support.
+- **Speech output:** Reads agent responses aloud using browser speech synthesis.
+- **Live interaction states:** Displays Listening, Thinking, and Speaking states.
+- **Live transcript:** Shows customer and agent messages during the conversation.
+- **Post-call summary:** Generates structured JSON after the call ends.
+- **Text fallback:** Allows text-based testing when browser speech recognition is unavailable.
+- **Server-side API key handling:** Keeps the Gemini API key in server-side environment variables instead of exposing it in frontend code.
+- **Deployable architecture:** Supports local development and deployment to Vercel.
+
+## Technology Stack
+
+| Technology | Purpose |
+|---|---|
+| Next.js | Full-stack React framework and API routes |
+| React | Interactive user interface |
+| TypeScript | Type safety and maintainable code |
+| Google Gemini API | Conversational reasoning and response generation |
+| Web Speech API | Browser speech recognition and speech synthesis |
+| Node.js | Server-side JavaScript runtime |
+| JSON | Mock order data storage |
+| Vercel | Application deployment and hosting |
+| Git and GitHub | Version control and source code management |
+
+## System Architecture
 
 ```text
-Browser
-  │
-  ├── Microphone
-  │      ↓
-  │  Web Speech API (STT)
-  │      ↓
-  ├── Next.js React UI
-  │      ↓ POST /api/chat
-  │  Gemini model
-  │      │
-  │      ├── normal Aura question → answer from policy prompt
-  │      │
-  │      └── order question → get_order_details(order_id)
-  │                                ↓
-  │                              data/orders.json
-  │                                ↓
-  │                           Gemini final answer
-  │      ↓
-  │  Browser SpeechSynthesis (TTS)
-  │      ↓
-  │  Speaker
-  │
-  └── End Call → POST /api/summary → structured JSON
+                 CUSTOMER
+                     |
+                     v
+            Browser Voice Interface
+                     |
+          +----------+----------+
+          |                     |
+          v                     v
+   Speech Recognition     Text Fallback
+          |                     |
+          +----------+----------+
+                     |
+                     v
+              Next.js Frontend
+                     |
+                     | POST /api/chat
+                     v
+              Backend API
+                     |
+                     v
+                Gemini AI
+                     |
+            +--------+--------+
+            |                 |
+            v                 v
+       General Query      Order Query
+                              |
+                              v
+                   get_order_details()
+                              |
+                              v
+                       orders.json
+                              |
+                              v
+                     Order Tool Result
+                              |
+                              v
+                    Gemini Final Response
+                              |
+                              v
+                     Browser Speech Output
+                              |
+                              v
+                       Live Transcript
+                              |
+                         End Call
+                              |
+                              v
+                     POST /api/summary
+                              |
+                              v
+                    Structured JSON Summary
 ```
 
-## Project structure
+### Request Flow
+
+1. The customer speaks or enters a message in the browser.
+2. The frontend sends the message to `/api/chat`.
+3. The backend uses Gemini to interpret the request and generate a response.
+4. For order-specific questions, the agent can request the `get_order_details(order_id)` tool.
+5. The tool retrieves matching information from the mock order database.
+6. The agent uses the returned information to formulate its response.
+7. The frontend displays the response and can read it aloud.
+8. When the call ends, the transcript is submitted to `/api/summary`.
+9. The backend returns structured JSON for display in the post-call summary panel.
+
+The summary implementation uses rule-based classification to generate the structured output locally, avoiding a dependency on an additional Gemini request for the post-call summary.
+
+## Project Structure
 
 ```text
-app/
-├── api/
-│   ├── chat/route.ts
-│   └── summary/route.ts
-├── globals.css
-├── layout.tsx
-└── page.tsx
-components/
-└── VoiceAgent.tsx
-data/
-└── orders.json
-lib/
-├── agent.ts
-├── orders.ts
-└── types.ts
-.env.example
-.gitignore
-next.config.mjs
-next-env.d.ts
-package.json
-README.md
-tsconfig.json
+aura-skincare-ai-voice-agent/
+├── app/
+│   ├── api/
+│   │   ├── chat/
+│   │   │   └── route.ts
+│   │   └── summary/
+│   │       └── route.ts
+│   ├── globals.css
+│   ├── layout.tsx
+│   └── page.tsx
+├── components/
+│   └── VoiceAgent.tsx
+├── data/
+│   └── orders.json
+├── lib/
+│   ├── agent.ts
+│   ├── orders.ts
+│   └── types.ts
+├── public/
+├── .env.example
+├── .gitignore
+├── next.config.mjs
+├── package.json
+├── package-lock.json
+├── README.md
+└── tsconfig.json
 ```
 
-## Requirements
+### Important Files
 
-- Node.js 20+
-- A modern browser. Chrome/Edge are recommended because `SpeechRecognition` has limited browser availability.
-- Gemini API key from Google AI Studio.
+- `app/api/chat/route.ts` — Handles conversational requests and Gemini integration.
+- `app/api/summary/route.ts` — Generates structured post-call summaries.
+- `components/VoiceAgent.tsx` — Implements the voice interface, transcript, and call controls.
+- `lib/agent.ts` — Contains agent instructions and tool definitions.
+- `lib/orders.ts` — Implements order lookup functionality.
+- `lib/types.ts` — Defines shared TypeScript types.
+- `data/orders.json` — Contains mock customer order information.
+- `.env.example` — Documents required environment variables using placeholders.
 
-## Local setup
+## Getting Started
+
+### Prerequisites
+
+Install the following before running the project:
+
+- Node.js 20 or later.
+- npm.
+- Git.
+- A modern browser, preferably Google Chrome or Microsoft Edge.
+- A Gemini API key from Google AI Studio.
+
+### 1. Clone the Repository
+
+Open a terminal and run:
+
+```bash
+git clone https://github.com/Kushagrarai09/aura-skincare-ai-voice-agent.git
+```
+
+Navigate into the project:
+
+```bash
+cd aura-skincare-ai-voice-agent
+```
+
+### 2. Install Dependencies
 
 ```bash
 npm install
 ```
 
-Create `.env.local`:
+### 3. Configure Environment Variables
+
+Create a file named `.env.local` in the project root.
+
+Add the following configuration:
 
 ```env
-GEMINI_API_KEY=your_key_here
+GEMINI_API_KEY=your_gemini_api_key_here
 GEMINI_MODEL=gemini-2.5-flash
 ```
 
-Then:
+Replace `your_gemini_api_key_here` with your actual API key.
+
+If you use a different supported model, set `GEMINI_MODEL` to the model ID configured and verified for your Gemini API access.
+
+**Security note:** Never commit `.env.local`, API keys, OAuth tokens, or service-account credentials to GitHub. The `.env.example` file should contain placeholders only.
+
+### 4. Start the Development Server
 
 ```bash
 npm run dev
 ```
 
-Open:
+Open the application in your browser:
 
-```text
 http://localhost:3000
+
+The Next.js development server runs locally and provides the frontend and backend API routes.
+
+## How to Use the Application
+
+### Step 1: Open the Application
+
+Visit the live deployment:
+
+https://aura-skincare-ai-voice-agent.vercel.app/
+
+Alternatively, start the application locally using the setup instructions above.
+
+### Step 2: Start a Call
+
+Click **Start Call** and allow microphone access when your browser asks for permission.
+
+The agent greets the customer and waits for their question.
+
+### Step 3: Ask a Customer Support Question
+
+Try questions such as:
+
+- "Where is my order ORD-101?"
+- "What product did I order in ORD-103?"
+- "Can I cancel my order?"
+- "What is your return policy?"
+
+Use the text fallback if speech recognition is unavailable in your browser.
+
+### Step 4: Follow the Conversation
+
+Aria processes the message, retrieves order information when needed, and responds according to the configured policies.
+
+The interface displays the conversation and the current interaction state.
+
+### Step 5: End the Call
+
+Click **End Call** when you finish.
+
+The application displays the chronological transcript and the Post-Call Structured Summary.
+
+### Step 6: Inspect the JSON Summary
+
+The summary includes fields such as:
+
+```json
+{
+  "customer_intent": "ORDER_TRACKING",
+  "order_id": "ORD-101",
+  "resolution_status": "RESOLVED",
+  "call_summary": "Customer asked about the status of order ORD-101.",
+  "tool_used": "get_order_details",
+  "key_policy": null
+}
 ```
 
-Allow microphone access and click **Start Call**.
+This is an illustrative example of the output format. Actual values depend on the conversation.
 
-## Recommended test script
+## Sample Orders
 
-### 1. Order lookup
+The application uses mock data for assessment and demonstration purposes.
 
-Say:
+| Order ID | Product | Amount | Status |
+|---|---|---:|---|
+| ORD-101 | Vitamin C Serum (30ml) | ₹699 | Out for Delivery |
+| ORD-102 | Hydrating Sunscreen SPF 50 | ₹499 | Delivered |
+| ORD-103 | Green Tea Face Wash + Toner | ₹850 | Processing |
 
-> Where is my order ORD-101?
+### Order-Specific Details
 
-Expected: the agent calls `get_order_details` and explains that ORD-101 is out for delivery via BlueDart and expected by 6 PM today.
+**ORD-101**
+- Courier: BlueDart.
+- Tracking ID: BD-982103.
+- Expected delivery: By 6 PM today, according to the sample data.
+- Cancellation: Not permitted because the order is out for delivery.
 
-### 2. Cancellation policy
+**ORD-102**
+- Courier: Delhivery.
+- Tracking ID: DL-441029.
+- Status: Delivered approximately 14 days ago.
+- Return eligibility must be evaluated against the return policy and product condition.
 
-Say:
+**ORD-103**
+- Status: Processing.
+- Ordered approximately three hours ago in the sample data.
+- Cancellation eligible under the configured policy.
+- No exact shipping or delivery date is provided.
 
-> I want to cancel ORD-101.
+These records are mock data. They do not represent real customer orders or live courier tracking.
 
-Expected: the agent checks the order and refuses cancellation because it is already Out for Delivery.
+## Business Rules and Policies
 
-Then test:
+The agent is configured to follow these Aura Skincare policies:
 
-> Can I cancel ORD-103?
+### Delivery
+- Free delivery applies to orders above ₹499.
+- Orders below ₹499 incur ₹50 shipping.
+- Standard delivery typically takes 3–5 business days once shipped.
 
-Expected: the agent checks the order and explains that it is still Processing and therefore eligible for cancellation.
+### Returns
+- Returns are allowed within seven days of delivery for unopened and unused products in their original packaging.
 
-### 3. Return policy
+### Damaged or Defective Products
+- Customers should report damaged or defective items within 48 hours.
+- Photos are required for a replacement request.
 
-Say:
+### Order Cancellation
+- Orders can be cancelled only while their status is Processing.
+- Shipped or Out for Delivery orders cannot be cancelled through the configured policy.
+- Customers may refuse delivery at the doorstep where applicable.
+- The current order lookup tool is read-only. The agent must not claim that it has executed a cancellation.
 
-> I bought my product 20 days ago and opened it. Can I return it?
+### Cash on Delivery
+- COD is available for orders up to ₹2,500.
+- Cash or UPI can be used at the doorstep.
 
-Expected: polite refusal based on the 7-day unopened/unused policy.
+## API Endpoints
 
-### 4. Invalid order
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/api/chat` | POST | Processes customer messages and returns agent responses |
+| `/api/summary` | POST | Generates the structured post-call JSON summary |
 
-Say:
+### Chat API
 
-> Where is ORD-999?
+The chat endpoint receives the conversation input and processes the request using the agent instructions and Gemini integration.
 
-Expected: the agent says it cannot locate the order and asks the customer to verify the ID.
+For order-related questions, the agent can use `get_order_details(order_id)` to retrieve data from the mock order store.
 
-### 5. Missing order ID
+### Summary API
 
-Say:
+The summary endpoint accepts the conversation messages and returns a JSON response containing:
 
-> Where is my order?
+- `customer_intent`
+- `order_id`
+- `resolution_status`
+- `call_summary`
+- `tool_used`
+- `key_policy`
 
-Expected: the agent asks for the order ID instead of guessing.
+The summary is currently generated using rule-based logic. Its classifications are heuristic and should be validated against representative conversations before production use.
 
-### 6. Out of scope
+## Example Test Scenarios
 
-Say:
+Use these scenarios to verify the application's main workflows.
 
-> Can you book me a flight to Goa?
-
-Expected: the agent explains that it can only help with Aura Skincare-related support.
-
-## Why this architecture?
-
-I chose a Next.js full-stack application so the evaluator can open one public URL and test the complete workflow without running a separate frontend manually. Browser speech APIs keep the MVP lightweight, while Gemini is kept server-side so the API key is never exposed to the browser. Order information is isolated behind a function tool, which makes the agent's use of live order data explicit and prevents it from inventing order details.
-
-## Most difficult part
-
-The hardest part is coordinating conversational state, tool calling and voice state transitions without making the interaction feel like a form. The implementation separates Listening, Thinking and Speaking states, pauses recognition while the agent speaks, executes `get_order_details` only when the model requests it, and then sends the tool result back to the model for a grounded customer-facing response.
-
-## If I had one more week
-
-I would replace the browser SpeechRecognition/SpeechSynthesis layer with a production realtime speech-to-speech service for lower latency and more consistent browser behavior. I would also add interruption/barge-in, observability, authentication, persistent call storage, automated evaluation tests, and a real database.
-
-## At 1,000 conversations/day
-
-I would move orders to PostgreSQL or another managed database, add connection pooling and indexes, horizontally scale the application, add Redis for short-lived session state/caching where appropriate, introduce request/rate-limit controls, add structured logs and tracing, monitor voice/LLM latency and error rates, implement retries and timeouts for provider calls, and control LLM/voice costs with model routing and caching. I would also separate synchronous voice traffic from asynchronous analytics/summary workloads using a queue.
+| Test | Customer request | Expected behaviour |
+|---|---|---|
+| Order tracking | "Where is my order ORD-101?" | Returns the configured status, courier, tracking ID, and expected delivery |
+| Product details | "What did I order in ORD-103?" | Identifies the product and amount |
+| Eligible cancellation | "Can I cancel ORD-103?" | Explains that Processing orders are eligible for cancellation |
+| Ineligible cancellation | "Can I cancel ORD-101?" | Explains that Out for Delivery orders cannot be cancelled |
+| Return policy | "I bought my product 20 days ago and opened it. Can I return it?" | Explains the seven-day and unopened/unused eligibility requirements |
+| Invalid order | "Where is ORD-999?" | States that the order could not be found |
+| Missing order ID | "Where is my order?" | Requests the order ID |
+| Out-of-scope request | "Can you book a flight to Goa?" | Politely redirects to Aura Skincare support |
+| Unknown delivery estimate | "When exactly will ORD-103 arrive?" | Does not invent an exact delivery date |
+| Post-call summary | End a conversation | Displays a transcript and structured JSON summary |
 
 ## Deployment
 
-### Vercel
+The project is deployed using Vercel.
 
-1. Push this repository to GitHub.
-2. Import the repository into Vercel.
-3. Add `GEMINI_API_KEY` in Vercel Project Settings → Environment Variables.
-4. Add `GEMINI_MODEL=gemini-2.5-flash`.
-5. Deploy.
-6. Open the public URL in Chrome/Edge and allow microphone access.
+**Live Application:** https://aura-skincare-ai-voice-agent.vercel.app/
 
-Do not commit `.env.local` or any API key.
+To deploy your own instance:
 
-## Important browser note
+1. Push the project to a GitHub repository.
+2. Sign in to Vercel.
+3. Import the repository.
+4. Allow Vercel to detect the Next.js framework.
+5. Add `GEMINI_API_KEY` and `GEMINI_MODEL` under the project's Environment Variables.
+6. Deploy the application.
+7. Open the deployment URL and test the voice and text workflows.
 
-The Web Speech API has two separate parts: SpeechRecognition for speech-to-text and SpeechSynthesis for text-to-speech. SpeechSynthesis is broadly available, while SpeechRecognition has limited availability across browsers. Chrome/Edge are therefore recommended for the assessment demo. The app includes a text fallback so the core AI/tool flow can still be demonstrated if recognition is unavailable.
+Keep credentials in environment variables. Never expose API keys in client-side code or commit them to Git.
 
-## Submission checklist
+## Design Decisions
 
-- [ ] Public application URL
-- [ ] GitHub repository
-- [ ] README with architecture and Section 9 answers
-- [ ] `.env.example`
-- [ ] 3–5 minute demo video
-- [ ] Short 2–3 sentence approach note
-- [ ] LinkedIn profile link
+### Why Next.js?
+
+Next.js allows the frontend and backend API routes to be deployed together. This keeps the application simple to run, test, and evaluate through a single URL.
+
+### Why the Web Speech API?
+
+Browser speech recognition and speech synthesis provide a lightweight way to demonstrate voice interaction without integrating a separate telephony system.
+
+### Why Gemini?
+
+Gemini provides conversational understanding and response generation, allowing the agent to respond naturally to customer questions while following configured instructions and policies.
+
+### Why a Mock Order Database?
+
+The assessment can be demonstrated without access to a real e-commerce backend. Keeping order access behind `get_order_details(order_id)` makes the data retrieval boundary explicit and allows the mock store to be replaced by a real service later.
+
+### Why Structured JSON?
+
+A consistent JSON format makes the call outcome easier to inspect, test, analyze, and integrate with future customer support analytics.
+
+## Challenges and Solutions
+
+### 1. Coordinating Voice and Conversation State
+
+Voice interfaces need to coordinate speech recognition, model responses, and speech synthesis without overlapping input and output.
+
+**Approach:** The interface separates Listening, Thinking, and Speaking states and coordinates recognition with the agent's spoken response.
+
+### 2. Grounding Responses in Order Data
+
+The agent should not invent tracking details, delivery dates, or order statuses.
+
+**Approach:** Order-specific information is retrieved through `get_order_details(order_id)` and the mock order database.
+
+### 3. Handling Model Availability During Summarization
+
+An additional model request can fail because of provider availability or rate limits.
+
+**Approach:** The current summary endpoint uses local rule-based logic to generate the structured summary without requiring another Gemini request.
+
+### 4. Supporting Browser Differences
+
+Speech recognition availability varies between browsers.
+
+**Approach:** Chrome and Edge are recommended, and a text input fallback is provided to demonstrate the core chat and order lookup functionality.
+
+## Future Improvements
+
+If development continued for another week, the following improvements would be priorities:
+
+- Integrate a production real-time speech service for more consistent voice interaction and lower latency.
+- Add interruption and barge-in support so customers can interrupt the agent naturally.
+- Store call transcripts and summaries persistently.
+- Add automated tests for order lookup, policies, and summary classification.
+- Introduce authentication and authorization.
+- Add structured logging, tracing, and error monitoring.
+- Replace mock order data with a real order management API.
+- Improve summary classification and validate it against a labelled evaluation dataset.
+- Add multilingual support and accessibility improvements.
+
+## Scaling to 1,000 Conversations per Day
+
+For a larger deployment, I would evolve the MVP into a more resilient customer support service.
+
+### Data and Infrastructure
+- Move order records to a managed database such as PostgreSQL.
+- Add indexes and connection pooling.
+- Scale application instances horizontally as required.
+- Introduce Redis only where caching or short-lived session state provides measurable benefits.
+
+### Reliability
+- Add request timeouts, retries with backoff, and rate limits.
+- Implement provider failure handling and fallback behaviour.
+- Monitor API errors, response latency, and resource consumption.
+- Add structured logs and distributed tracing.
+
+### Cost and Performance
+- Use appropriate model routing and caching where safe.
+- Track LLM and speech-service costs per conversation.
+- Separate asynchronous analytics and summary processing from latency-sensitive voice interactions using a queue when appropriate.
+- Load-test realistic concurrent traffic before selecting infrastructure capacity.
+
+The target of 1,000 conversations per day would need to be validated through load testing, latency measurements, and provider quota checks; the current MVP has not been benchmarked at that scale.
+
+## Limitations
+
+- Orders are stored in a mock JSON database.
+- Order status and tracking details are not updated from real courier systems.
+- The application does not execute actual cancellations, refunds, or replacement requests.
+- Speech recognition depends on browser support and permissions.
+- The summary classifier uses heuristics and may misclassify ambiguous conversations.
+- Production use would require authentication, data protection controls, monitoring, persistent storage, and automated testing.
+
+## Author
+
+**Kushagra Rai**
+
+- GitHub: https://github.com/Kushagrarai09
+- Live Project: https://aura-skincare-ai-voice-agent.vercel.app/
+
+---
+
